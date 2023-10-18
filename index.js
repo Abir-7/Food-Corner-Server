@@ -55,6 +55,8 @@ async function run() {
 
     const usersCollection = client.db("Food_Corner").collection("users");
     const menuCollection = client.db("Food_Corner").collection("allMenu");
+    const favouriteMenuCollection = client.db("Food_Corner").collection("favouriteMenu");
+
 
 
 
@@ -193,12 +195,33 @@ async function run() {
       console.log(id,'id')
       const query={_id:new ObjectId(id)}
       const result = await menuCollection.findOne(query)
-      console.log(result)
+     
       res.send(result)
     })
 
+    app.post('/addFavMenu',verifyJWT,async(req,res)=>{
+      console.log('add to favourite')
+      const menuId=req.body
+      const email = req.decoded.email;
+      console.log(menuId,'dup',email)
+      const query = {
+        $and: [
+          { menuID: menuId.menuID },
+          { userEmail:email }
+        ]
+      }
+      const existingItem=await favouriteMenuCollection.findOne(query)
+     
+      if(existingItem){
+       return res.status(409).send({result:'repeat'})
+      }
+      const result=await favouriteMenuCollection.insertOne(menuId)
+      res.send(result)
+    })
 
     //////////////////////////---Menu Api End---////////////////
+
+
     app.listen(port, () => {
       console.log(`Example app listening on port ${port}`)
     })
