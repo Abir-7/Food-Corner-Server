@@ -15,9 +15,9 @@ app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  console.log(authorization)
+  //console.log(authorization)
   if (!authorization) {
-    console.log('1')
+    //console.log('1')
     return res.status(401).send({ error: true, message: 'unauthorized access' });
   }
   // bearer token
@@ -25,7 +25,7 @@ const verifyJWT = (req, res, next) => {
 
   jwt.verify(token, process.env.ACCESS_Token, (err, decoded) => {
     if (err) {
-      console.log('2')
+      //console.log('2')
       return res.status(401).send({ error: true, message: 'unauthorized access' })
     }
     req.decoded = decoded;
@@ -58,9 +58,6 @@ async function run() {
     const favouriteMenuCollection = client.db("Food_Corner").collection("favouriteMenu");
 
 
-
-
-
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_Token, { expiresIn: '10h' })
@@ -70,7 +67,7 @@ async function run() {
 
     //use verifyJWT before using verifyAdmin
     const verifyAdmin = async (req, res, next) => {
-      console.log('verify admin')
+      //console.log('verify admin')
       const email = req.decoded.email;
 
       const query = { email: email }
@@ -86,19 +83,19 @@ async function run() {
 
 
     app.get('/', (req, res) => {
-      console.log('hi')
+      //console.log('hi')
       res.send('Hello World!')
     })
 
     ////////////////////////---USER API---/////////////////////////
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
-      console.log('get user')
+      //console.log('get user')
       const result = await usersCollection.find().toArray()
       res.send(result)
     })
 
     app.get('/singleUsers', verifyJWT, async (req, res) => {
-      console.log('get single  user')
+      //console.log('get single  user')
       const email = req.decoded.email;
 
       const query = { email: email }
@@ -108,7 +105,7 @@ async function run() {
     })
 
     app.post('/users', async (req, res) => {
-      console.log('add  user')
+      //console.log('add  user')
       const data = req.body
 
       const query = { email: data.email }
@@ -122,12 +119,12 @@ async function run() {
     })
 
     app.patch('/userUpdate', verifyJWT, async (req, res) => {
-      console.log('update  user')
-      console.log('hi')
+      //console.log('update  user')
+      //console.log('hi')
       const email = req.decoded.email;
 
       const data = req.body
-      console.log(data, '111')
+      //console.log(data, '111')
 
       const filter = { email: email };
 
@@ -152,17 +149,17 @@ async function run() {
 
     ////////////////////////---Admin API ---/////////////////////////
     app.get('/user/admin', verifyJWT, verifyAdmin, async (req, res) => {
-      console.log('get admin or user')
+      //console.log('get admin or user')
       const email = req.decoded.email;
       const result = await usersCollection.findOne({ email: email })
-      // console.log(result?.role, '145')
+      // //console.log(result?.role, '145')
       if (result?.role === 'admin') {
-        console.log('get admin or user2')
+        //console.log('get admin or user2')
         res.status(200).send(true)
         //res.send(true)
       }
       else {
-        console.log('get admin or user 3')
+        //console.log('get admin or user 3')
         res.status(403).send(false)
       }
     })
@@ -175,50 +172,89 @@ async function run() {
 
     //Add Menu//
     app.post('/addMenu', verifyJWT, verifyAdmin, async (req, res) => {
-      console.log('add menu')
+      //console.log('add menu')
       const data = req.body
-      //console.log(data,';;;;')
+      ////console.log(data,';;;;')
       const result = await menuCollection.insertOne(data)
       res.send(result)
     })
 
     app.get('/getMenu', async (req, res) => {
-      console.log('get menu')
+      //console.log('get menu')
       const result = await menuCollection.find().toArray()
       res.send(result)
     })
 
-    app.get('/getMenu/:id', verifyJWT,async (req, res) => {
+    app.get('/getMenu/:id', verifyJWT, async (req, res) => {
       console.log('get single menu')
 
       const id = req.params.id
-      console.log(id,'id')
-      const query={_id:new ObjectId(id)}
+      //console.log(id, 'id')
+      const query = { _id: new ObjectId(id) }
       const result = await menuCollection.findOne(query)
-     
+
       res.send(result)
     })
 
-    app.post('/addFavMenu',verifyJWT,async(req,res)=>{
+    app.post('/addFavMenu',verifyJWT, async (req, res) => {
       console.log('add to favourite')
-      const menuId=req.body
-      const email = req.decoded.email;
-      console.log(menuId,'dup',email)
+      const menuId = req.body
+      console.log(menuId)
+  
       const query = {
         $and: [
           { menuID: menuId.menuID },
-          { userEmail:email }
+          { userEmail: menuId.userEmail }
         ]
       }
-      const existingItem=await favouriteMenuCollection.findOne(query)
-     
-      if(existingItem){
-       return res.status(409).send({result:'repeat'})
+      const existingItem = await favouriteMenuCollection.findOne(query)
+
+      if (existingItem) {
+       await favouriteMenuCollection.deleteOne(query)
+      
+        return res.status(409).send({ result: 'repeat' })
       }
-      const result=await favouriteMenuCollection.insertOne(menuId)
-      res.send(result)
+      else {
+        const result = await favouriteMenuCollection.insertOne(menuId)
+        return res.send(result)
+      }
     })
 
+    app.get('/favMenu/:id',verifyJWT,async(req,res)=>{
+      console.log('is favourite or not')
+      const id=req.params.id
+      const email = req.decoded.email;
+      console.log(id,email,'---')
+      const query = {
+        $and: [
+          { menuID: id },
+          { userEmail: email }
+        ]
+      }
+      const existingItem = await favouriteMenuCollection.findOne(query)
+
+      if (existingItem) {
+        console.log('true')
+        return res.send({ result: true })
+      }
+      else {
+        console.log('false')
+        return res.send({result:false})
+    
+      }
+    })
+
+    app.get('/favMenuData/:email',verifyJWT,async(req,res)=>{
+      console.log('get user all fav data')
+      const email= req.decoded.email|| req.params.email
+      console.log(email)
+      const query={userEmail:email}
+      const favMenuByUser=await favouriteMenuCollection.find(query).toArray()
+      const favMenuId=favMenuByUser.map(menuId=>new ObjectId(menuId.menuID))
+      const result=await menuCollection.find({_id:{$in:favMenuId}}).toArray()
+      console.log(result)
+      res.send(result)
+    })
     //////////////////////////---Menu Api End---////////////////
 
 
