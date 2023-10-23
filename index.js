@@ -18,9 +18,9 @@ app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  //console.log(authorization)
+  ////console.log(authorization)
   if (!authorization) {
-    //console.log('1')
+    ////console.log('1')
     return res.status(401).send({ error: true, message: 'unauthorized access' });
   }
   // bearer token
@@ -28,7 +28,7 @@ const verifyJWT = (req, res, next) => {
 
   jwt.verify(token, process.env.ACCESS_Token, (err, decoded) => {
     if (err) {
-      //console.log('2')
+      ////console.log('2')
       return res.status(401).send({ error: true, message: 'unauthorized access' })
     }
     req.decoded = decoded;
@@ -72,15 +72,16 @@ async function run() {
 
     //use verifyJWT before using verifyAdmin
     const verifyAdmin = async (req, res, next) => {
-      //console.log('verify admin')
+      ////console.log('verify admin')
       const email = req.decoded.email;
-
+      console.log(email,'veryfy admin')
       const query = { email: email }
       const user = await usersCollection.findOne(query);
 
       if (user) {
         if (user?.role !== 'admin') {
-          return res.status(403).send({ error: true, message: 'forbidden message' });
+          console.log('false section')
+          return res.status(403).send({ error: true, message: 'forbidden Access', isAdmin: false });
         }
       }
       next();
@@ -88,52 +89,52 @@ async function run() {
 
 
     app.get('/', (req, res) => {
-      //console.log('hi')
+      ////console.log('hi')
       res.send('Hello World!')
     })
 
     ///////////////////---Create payment Intent---/////////////////////
-    app.post("/create-payment-intent",verifyJWT ,async (req, res) => {
-      
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+
       const email = req.decoded.email
-     
+
       const { price } = req.body;
-      const amount=price*100
-      console.log(email,'line 96',amount)
-      
+      const amount = price * 100
+      //console.log(email, 'line 96', amount)
+
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "bdt",
         payment_method_types: ["card"],
       });
-    
+
       res.send({
         clientSecret: paymentIntent.client_secret,
       });
     });
 
 
- //---save payment to server
+    //---save payment to server
 
- app.post("/savePayment",async(req,res)=>{
-  const data= req.body
-  const result=await paymentCollection.insertOne(data)
-  res.send(result)
- })
+    app.post("/savePayment", async (req, res) => {
+      const data = req.body
+      const result = await paymentCollection.insertOne(data)
+      res.send(result)
+    })
 
 
 
-//////////////////////////---End---//////////////////////////
+    //////////////////////////---End---//////////////////////////
 
     ////////////////////////---USER API---/////////////////////////
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
-      //console.log('get user')
+      ////console.log('get user')
       const result = await usersCollection.find().toArray()
       res.send(result)
     })
 
     app.get('/singleUsers', verifyJWT, async (req, res) => {
-      //console.log('get single  user')
+      ////console.log('get single  user')
       const email = req.decoded.email;
 
       const query = { email: email }
@@ -143,7 +144,7 @@ async function run() {
     })
 
     app.post('/users', async (req, res) => {
-      //console.log('add  user')
+      ////console.log('add  user')
       const data = req.body
 
       const query = { email: data.email }
@@ -157,12 +158,12 @@ async function run() {
     })
 
     app.patch('/userUpdate', verifyJWT, async (req, res) => {
-      //console.log('update  user')
-      //console.log('hi')
+      ////console.log('update  user')
+      ////console.log('hi')
       const email = req.decoded.email;
 
       const data = req.body
-      //console.log(data, '111')
+      ////console.log(data, '111')
 
       const filter = { email: email };
 
@@ -187,18 +188,22 @@ async function run() {
 
     ////////////////////////---Admin API ---/////////////////////////
     app.get('/user/admin', verifyJWT, verifyAdmin, async (req, res) => {
-      //console.log('get admin or user')
+    console.log('get admin or user')
+    
       const email = req.decoded.email;
-      const result = await usersCollection.findOne({ email: email })
-      // //console.log(result?.role, '145')
-      if (result?.role === 'admin') {
-        //console.log('get admin or user2')
-        res.status(200).send(true)
-        //res.send(true)
-      }
-      else {
-        //console.log('get admin or user 3')
-        res.status(403).send(false)
+      console.log(email,'line 193')
+      if (email) {
+        const result = await usersCollection.findOne({ email: email })
+       console.log(result?.role, '145')
+        if (result.role === 'admin') {
+          console.log('true section')
+          res.status(200).send(true)
+
+        }
+        else {
+          ////console.log('get admin or user 3')
+          res.status(403).send(false)
+        }
       }
     })
 
@@ -210,35 +215,35 @@ async function run() {
 
     //Add Menu//
     app.post('/addMenu', verifyJWT, verifyAdmin, async (req, res) => {
-      //console.log('add menu')
+      ////console.log('add menu')
       const data = req.body
-      ////console.log(data,';;;;')
+      //////console.log(data,';;;;')
       const result = await menuCollection.insertOne(data)
       res.send(result)
     })
 
     app.get('/getMenu', async (req, res) => {
-      //console.log('get menu')
+      ////console.log('get menu')
       const result = await menuCollection.find().toArray()
       res.send(result)
     })
 
     app.get('/getMenu/:id', verifyJWT, async (req, res) => {
-      console.log('get single menu')
+      //console.log('get single menu')
 
       const id = req.params.id
-      //console.log(id, 'id')
+      ////console.log(id, 'id')
       const query = { _id: new ObjectId(id) }
       const result = await menuCollection.findOne(query)
 
       res.send(result)
     })
 
-    app.post('/addFavMenu',verifyJWT, async (req, res) => {
-      console.log('add to favourite')
+    app.post('/addFavMenu', verifyJWT, async (req, res) => {
+      //console.log('add to favourite')
       const menuId = req.body
-      console.log(menuId)
-  
+      //console.log(menuId)
+
       const query = {
         $and: [
           { menuID: menuId.menuID },
@@ -248,8 +253,8 @@ async function run() {
       const existingItem = await favouriteMenuCollection.findOne(query)
 
       if (existingItem) {
-       await favouriteMenuCollection.deleteOne(query)
-      
+        await favouriteMenuCollection.deleteOne(query)
+
         return res.status(409).send({ result: 'repeat' })
       }
       else {
@@ -258,11 +263,11 @@ async function run() {
       }
     })
 
-    app.get('/favMenu/:id',verifyJWT,async(req,res)=>{
-      console.log('is favourite or not')
-      const id=req.params.id
+    app.get('/favMenu/:id', verifyJWT, async (req, res) => {
+      //console.log('is favourite or not')
+      const id = req.params.id
       const email = req.decoded.email;
-      console.log(id,email,'---')
+      //console.log(id, email, '---')
       const query = {
         $and: [
           { menuID: id },
@@ -272,33 +277,33 @@ async function run() {
       const existingItem = await favouriteMenuCollection.findOne(query)
 
       if (existingItem) {
-        console.log('true')
+        //console.log('true')
         return res.send({ result: true })
       }
       else {
-        console.log('false')
-        return res.send({result:false})
-    
+        //console.log('false')
+        return res.send({ result: false })
+
       }
     })
 
-    app.get('/favMenuData/:email',verifyJWT,async(req,res)=>{
-      console.log('get user all fav data')
-      const email= req.decoded.email|| req.params.email
-      console.log(email)
-      const query={userEmail:email}
-      const favMenuByUser=await favouriteMenuCollection.find(query).toArray()
-      const favMenuId=favMenuByUser.map(menuId=>new ObjectId(menuId.menuID))
-      const result=await menuCollection.find({_id:{$in:favMenuId}}).toArray()
-      console.log(result)
+    app.get('/favMenuData/:email', verifyJWT, async (req, res) => {
+      //console.log('get user all fav data')
+      const email = req.decoded.email || req.params.email
+      //console.log(email)
+      const query = { userEmail: email }
+      const favMenuByUser = await favouriteMenuCollection.find(query).toArray()
+      const favMenuId = favMenuByUser.map(menuId => new ObjectId(menuId.menuID))
+      const result = await menuCollection.find({ _id: { $in: favMenuId } }).toArray()
+      //console.log(result)
       res.send(result)
     })
 
-    app.delete('/deleteFavMenu',verifyJWT,async(req,res)=>{
-      console.log('delete user single fav data')
-      const email= req.decoded.email || req.query.email
-      const menuId=req.query.menuId
-      console.log(email,menuId)
+    app.delete('/deleteFavMenu', verifyJWT, async (req, res) => {
+      //console.log('delete user single fav data')
+      const email = req.decoded.email || req.query.email
+      const menuId = req.query.menuId
+      //console.log(email, menuId)
 
       const query = {
         $and: [
@@ -307,8 +312,8 @@ async function run() {
         ]
       }
 
-      const result=await favouriteMenuCollection.deleteOne(query)
-      console.log(result)
+      const result = await favouriteMenuCollection.deleteOne(query)
+      //console.log(result)
       res.send(result)
     })
 
