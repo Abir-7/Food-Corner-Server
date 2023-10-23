@@ -1,7 +1,10 @@
 const express = require('express')
 const app = express()
-
 require('dotenv').config()
+
+const stripe = require("stripe")(`${process.env.PAYMENT_SK}`);
+
+
 
 const port = process.env.PORT || 4000;
 const cors = require('cors');
@@ -56,6 +59,8 @@ async function run() {
     const usersCollection = client.db("Food_Corner").collection("users");
     const menuCollection = client.db("Food_Corner").collection("allMenu");
     const favouriteMenuCollection = client.db("Food_Corner").collection("favouriteMenu");
+    const paymentCollection = client.db("Food_Corner").collection("usersAllPayment");
+
 
 
     app.post('/jwt', (req, res) => {
@@ -86,6 +91,39 @@ async function run() {
       //console.log('hi')
       res.send('Hello World!')
     })
+
+    ///////////////////---Create payment Intent---/////////////////////
+    app.post("/create-payment-intent",verifyJWT ,async (req, res) => {
+      
+      const email = req.decoded.email
+     
+      const { price } = req.body;
+      const amount=price*100
+      console.log(email,'line 96',amount)
+      
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "bdt",
+        payment_method_types: ["card"],
+      });
+    
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+
+ //---save payment to server
+
+ app.post("/savePayment",async(req,res)=>{
+  const data= req.body
+  const result=await paymentCollection.insertOne(data)
+  res.send(result)
+ })
+
+
+
+//////////////////////////---End---//////////////////////////
 
     ////////////////////////---USER API---/////////////////////////
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
@@ -255,6 +293,26 @@ async function run() {
       console.log(result)
       res.send(result)
     })
+
+    app.delete('/deleteFavMenu',verifyJWT,async(req,res)=>{
+      console.log('delete user single fav data')
+      const email= req.decoded.email || req.query.email
+      const menuId=req.query.menuId
+      console.log(email,menuId)
+
+      const query = {
+        $and: [
+          { menuID: menuId },
+          { userEmail: email }
+        ]
+      }
+
+      const result=await favouriteMenuCollection.deleteOne(query)
+      console.log(result)
+      res.send(result)
+    })
+
+
     //////////////////////////---Menu Api End---////////////////
 
 
