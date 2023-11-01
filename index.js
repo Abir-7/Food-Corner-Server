@@ -18,9 +18,9 @@ app.use(express.json());
 
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
-  ////console.log(authorization)
+  ////////console.log(authorization)
   if (!authorization) {
-    ////console.log('1')
+    ////////console.log('1')
     return res.status(401).send({ error: true, message: 'unauthorized access' });
   }
   // bearer token
@@ -28,12 +28,21 @@ const verifyJWT = (req, res, next) => {
 
   jwt.verify(token, process.env.ACCESS_Token, (err, decoded) => {
     if (err) {
-      ////console.log('2')
+      ////////console.log('2')
       return res.status(401).send({ error: true, message: 'unauthorized access' })
     }
     req.decoded = decoded;
     next();
   })
+}
+
+// Function to shuffle an array using the Fisher-Yates (Knuth) shuffle algorithm
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }
 
 
@@ -72,15 +81,15 @@ async function run() {
 
     //use verifyJWT before using verifyAdmin
     const verifyAdmin = async (req, res, next) => {
-      ////console.log('verify admin')
+      ////////console.log('verify admin')
       const email = req.decoded.email;
-      console.log(email,'veryfy admin')
+      ////console.log(email, 'veryfy admin')
       const query = { email: email }
       const user = await usersCollection.findOne(query);
 
       if (user) {
         if (user?.role !== 'admin') {
-          console.log('false section')
+          ////console.log('false section')
           return res.status(403).send({ error: true, message: 'forbidden Access', isAdmin: false });
         }
       }
@@ -89,18 +98,20 @@ async function run() {
 
 
     app.get('/', (req, res) => {
-      ////console.log('hi')
+      ////////console.log('hi')
       res.send('Hello World!')
     })
 
-    ///////////////////---Create payment Intent---/////////////////////
+    ///////////////////---All payment Api---/////////////////////
+
+
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
 
       const email = req.decoded.email
 
       const { price } = req.body;
       const amount = price * 100
-      //console.log(email, 'line 96', amount)
+      //////console.log(email, 'line 96', amount)
 
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
@@ -122,19 +133,135 @@ async function run() {
       res.send(result)
     })
 
+    //---- get user order info
 
+    app.get("/getOrderInfo/:email", verifyJWT, async (req, res) => {
+      const providedEmail = req.params?.email
+      const decodedEmail = req.decoded.email
+
+      if (providedEmail == decodedEmail) {
+        const user = await usersCollection.findOne({ email: providedEmail })
+        if (user.role == 'admin') {
+          const query = { status: 'Pending' }
+          const query1 = { status: 'Delivered' }
+          const result = await paymentCollection.find(query).toArray()
+          const result1 = await paymentCollection.find(query1).toArray()
+          return res.send({result,result1})
+        }
+        else {
+          const query={
+            $and: [
+              { userEmail: decodedEmail || providedEmail },
+              { status: 'Pending' }
+            ]
+          
+          }
+
+          const query1={
+            $and: [
+              { userEmail: decodedEmail || providedEmail },
+              { status: 'Delivered' }
+            ]
+          
+          }
+
+          const result = await paymentCollection.find(query).toArray()
+          const result1 = await paymentCollection.find(query1).toArray()
+
+          return res.send({result,result1})
+        }
+      }
+      else {
+        res.send([])
+      }
+
+    })
+
+    //---modify order status
+
+    app.patch('/modifyOrderStatus', verifyJWT, verifyAdmin, async (req, res) => {
+      const status = req.body.status
+      const paymentID = req.body.paymentID
+      ////console.log(status, paymentID)
+
+      const providedEmail = req.body.userEmail
+      const decodedEmail = req.decoded.email
+      ////console.log(providedEmail,decodedEmail)
+      if (decodedEmail == providedEmail) {
+
+        const filter = { paymentID: paymentID };
+
+        const updateDoc = {
+          $set: {
+            status: status,
+            deliveryDate:new Date().toLocaleDateString(),
+            deliveryTime:new Date().toLocaleTimeString()
+          },
+        }
+        const options = { upsert: true };
+
+        const result = await paymentCollection.updateOne(filter, updateDoc, options)
+        ////console.log(result)
+        return res.send(result)
+      }
+
+    })
+
+
+    ///---get ordered item percentage
+
+    app.get('/orderItemPercent', verifyJWT, verifyAdmin, async (req, res) => {
+      const query1 = { status: 'Delivered' }
+      const orders = await paymentCollection.find(query1).toArray();
+    
+      const foodPercentages = {};
+    
+      // Step 2: Iterate through each order
+      orders.forEach(order => {
+        // Step 3: Iterate through each cart item
+        order.cartItem.forEach(item => {
+          // Step 4: Sum the quantities for each food item
+          const itemName = item.name;
+          const quantity = item.amount;
+    
+          if (foodPercentages[itemName]) {
+            foodPercentages[itemName] += quantity;
+          } else {
+            foodPercentages[itemName] = quantity;
+          }
+        });
+      });
+    
+      const totalQuantity = Object.values(foodPercentages).reduce((total, quantity) => total + quantity, 0);
+    
+      // Step 5 and 6: Calculate and return percentages as an array of objects
+      const percentages = [];
+      Object.keys(foodPercentages).forEach(itemName => {
+        const quantity = foodPercentages[itemName];
+        const percentage = (quantity / totalQuantity) * 100;
+        percentages.push({ name: itemName, percent: percentage.toFixed(2) });
+      });
+    
+      // Step 7: Sort percentages array in descending order
+      percentages.sort((a, b) => b.percent - a.percent);
+    
+      // Step 8: Get the top 10 items
+      const top10Items = percentages.slice(0, 10);
+    
+      res.send(top10Items);
+    })
 
     //////////////////////////---End---//////////////////////////
 
     ////////////////////////---USER API---/////////////////////////
     app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
-      ////console.log('get user')
+      ////////console.log('get user')
       const result = await usersCollection.find().toArray()
       res.send(result)
     })
 
     app.get('/singleUsers', verifyJWT, async (req, res) => {
-      ////console.log('get single  user')
+      ////////console.log('get single  user')
       const email = req.decoded.email;
 
       const query = { email: email }
@@ -143,8 +270,22 @@ async function run() {
       res.send(result)
     })
 
+
+    app.get('/singleUsers/:email', verifyJWT, async (req, res) => {
+    //console.log('get single  user')
+      const providedEmail=req.params.email
+      const email = req.decoded.email;
+      
+      const query = { email: providedEmail }
+      const result = await usersCollection.findOne(query)
+      //console.log(result,providedEmail)
+      res.send(result)
+    })
+
+
+
     app.post('/users', async (req, res) => {
-      ////console.log('add  user')
+      ////////console.log('add  user')
       const data = req.body
 
       const query = { email: data.email }
@@ -158,12 +299,12 @@ async function run() {
     })
 
     app.patch('/userUpdate', verifyJWT, async (req, res) => {
-      ////console.log('update  user')
-      ////console.log('hi')
+      ////////console.log('update  user')
+      ////////console.log('hi')
       const email = req.decoded.email;
 
       const data = req.body
-      ////console.log(data, '111')
+      ////////console.log(data, '111')
 
       const filter = { email: email };
 
@@ -188,20 +329,20 @@ async function run() {
 
     ////////////////////////---Admin API ---/////////////////////////
     app.get('/user/admin', verifyJWT, verifyAdmin, async (req, res) => {
-    console.log('get admin or user')
-    
+      ////console.log('get admin or user')
+
       const email = req.decoded.email;
-      console.log(email,'line 193')
+      ////console.log(email, 'line 193')
       if (email) {
         const result = await usersCollection.findOne({ email: email })
-       console.log(result?.role, '145')
+        ////console.log(result?.role, '145')
         if (result.role === 'admin') {
-          console.log('true section')
+          ////console.log('true section')
           res.status(200).send(true)
 
         }
         else {
-          ////console.log('get admin or user 3')
+          ////////console.log('get admin or user 3')
           res.status(403).send(false)
         }
       }
@@ -215,34 +356,86 @@ async function run() {
 
     //Add Menu//
     app.post('/addMenu', verifyJWT, verifyAdmin, async (req, res) => {
-      ////console.log('add menu')
+      ////////console.log('add menu')
       const data = req.body
-      //////console.log(data,';;;;')
+      //////////console.log(data,';;;;')
       const result = await menuCollection.insertOne(data)
       res.send(result)
     })
 
     app.get('/getMenu', async (req, res) => {
-      ////console.log('get menu')
+      ////////console.log('get menu')
       const result = await menuCollection.find().toArray()
       res.send(result)
     })
 
+
+    app.get('/thaiCuisine',async(req,res)=>{
+      const query = {
+        $and:[
+          { cuisine: 'Thai' },
+          {category:'Rice'},
+          { time:'Dinner'}
+        ]
+      }
+      const result=await menuCollection.find(query).toArray()
+      //res.send(result)
+      const randomizedResult = shuffleArray(result)
+      const randomFoods = randomizedResult.slice(0, 4)
+
+      const arrayOfIds = randomFoods.map(food => new ObjectId(food._id).toString());
+
+    // Use aggregation to find documents with matching IDs in FavMenu collection
+    const matchingDocs = await favouriteMenuCollection.aggregate([
+      {
+        $match: {
+          menuID: { $in: arrayOfIds }
+        }
+      }
+    ]).toArray();
+
+    //console.log(matchingDocs,)
+    // Update randomFoods with match field
+    randomFoods.forEach(food => {
+      food.match = matchingDocs.some(doc => doc.menuID === new ObjectId(food._id).toString());
+    });
+
+    res.send(randomFoods);
+  
+    })
+
+
     app.get('/getMenu/:id', verifyJWT, async (req, res) => {
-      //console.log('get single menu')
+      //////console.log('get single menu')
 
       const id = req.params.id
-      ////console.log(id, 'id')
+      const email=req.query.email
+      //console.log(id, 'id',email)
       const query = { _id: new ObjectId(id) }
       const result = await menuCollection.findOne(query)
 
+      const matchingDocs = await paymentCollection.aggregate([
+        {
+          $match: {
+            'userEmail':email
+            ,
+            'cartItem': {
+              $elemMatch: {
+                'menuID': new ObjectId(result._id).toString(),
+              },
+            },
+          },
+        }
+      ]).toArray()
+      
+      console.log(matchingDocs,'find')
       res.send(result)
     })
 
     app.post('/addFavMenu', verifyJWT, async (req, res) => {
-      //console.log('add to favourite')
+      //////console.log('add to favourite')
       const menuId = req.body
-      //console.log(menuId)
+      //////console.log(menuId)
 
       const query = {
         $and: [
@@ -264,10 +457,10 @@ async function run() {
     })
 
     app.get('/favMenu/:id', verifyJWT, async (req, res) => {
-      //console.log('is favourite or not')
+      //////console.log('is favourite or not')
       const id = req.params.id
       const email = req.decoded.email;
-      //console.log(id, email, '---')
+      //////console.log(id, email, '---')
       const query = {
         $and: [
           { menuID: id },
@@ -277,33 +470,33 @@ async function run() {
       const existingItem = await favouriteMenuCollection.findOne(query)
 
       if (existingItem) {
-        //console.log('true')
+        //////console.log('true')
         return res.send({ result: true })
       }
       else {
-        //console.log('false')
+        //////console.log('false')
         return res.send({ result: false })
 
       }
     })
 
     app.get('/favMenuData/:email', verifyJWT, async (req, res) => {
-      //console.log('get user all fav data')
+      //////console.log('get user all fav data')
       const email = req.decoded.email || req.params.email
-      //console.log(email)
+      //////console.log(email)
       const query = { userEmail: email }
       const favMenuByUser = await favouriteMenuCollection.find(query).toArray()
       const favMenuId = favMenuByUser.map(menuId => new ObjectId(menuId.menuID))
       const result = await menuCollection.find({ _id: { $in: favMenuId } }).toArray()
-      //console.log(result)
+      //////console.log(result)
       res.send(result)
     })
 
     app.delete('/deleteFavMenu', verifyJWT, async (req, res) => {
-      //console.log('delete user single fav data')
+      //////console.log('delete user single fav data')
       const email = req.decoded.email || req.query.email
       const menuId = req.query.menuId
-      //console.log(email, menuId)
+      //////console.log(email, menuId)
 
       const query = {
         $and: [
@@ -313,7 +506,7 @@ async function run() {
       }
 
       const result = await favouriteMenuCollection.deleteOne(query)
-      //console.log(result)
+      console.log(result,'delete')
       res.send(result)
     })
 
@@ -333,4 +526,3 @@ async function run() {
   }
 }
 run().catch(console.dir);
-
