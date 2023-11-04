@@ -69,6 +69,8 @@ async function run() {
     const menuCollection = client.db("Food_Corner").collection("allMenu");
     const favouriteMenuCollection = client.db("Food_Corner").collection("favouriteMenu");
     const paymentCollection = client.db("Food_Corner").collection("usersAllPayment");
+    const reviewCollection = client.db("Food_Corner").collection("usersReviews");
+    const feedbackCollection = client.db("Food_Corner").collection("usersFeedback");
 
 
 
@@ -102,7 +104,7 @@ async function run() {
       res.send('Hello World!')
     })
 
-    ///////////////////---All payment Api---/////////////////////
+    ///////////////////---All payment And Order Api---/////////////////////
 
 
     app.post("/create-payment-intent", verifyJWT, async (req, res) => {
@@ -133,7 +135,7 @@ async function run() {
       res.send(result)
     })
 
-    //---- get user order info
+    //---- get  user order info
 
     app.get("/getOrderInfo/:email", verifyJWT, async (req, res) => {
       const providedEmail = req.params?.email
@@ -146,29 +148,30 @@ async function run() {
           const query1 = { status: 'Delivered' }
           const result = await paymentCollection.find(query).toArray()
           const result1 = await paymentCollection.find(query1).toArray()
-          return res.send({result,result1})
+          console.log(result, result1)
+          return res.send({ result, result1 })
         }
         else {
-          const query={
+          const query = {
             $and: [
               { userEmail: decodedEmail || providedEmail },
               { status: 'Pending' }
             ]
-          
+
           }
 
-          const query1={
+          const query1 = {
             $and: [
               { userEmail: decodedEmail || providedEmail },
               { status: 'Delivered' }
             ]
-          
+
           }
 
           const result = await paymentCollection.find(query).toArray()
           const result1 = await paymentCollection.find(query1).toArray()
-
-          return res.send({result,result1})
+          console.log(result1)
+          return res.send({ result, result1 })
         }
       }
       else {
@@ -194,8 +197,8 @@ async function run() {
         const updateDoc = {
           $set: {
             status: status,
-            deliveryDate:new Date().toLocaleDateString(),
-            deliveryTime:new Date().toLocaleTimeString()
+            deliveryDate: new Date().toLocaleDateString(),
+            deliveryTime: new Date().toLocaleTimeString()
           },
         }
         const options = { upsert: true };
@@ -213,9 +216,9 @@ async function run() {
     app.get('/orderItemPercent', verifyJWT, verifyAdmin, async (req, res) => {
       const query1 = { status: 'Delivered' }
       const orders = await paymentCollection.find(query1).toArray();
-    
+
       const foodPercentages = {};
-    
+
       // Step 2: Iterate through each order
       orders.forEach(order => {
         // Step 3: Iterate through each cart item
@@ -223,7 +226,7 @@ async function run() {
           // Step 4: Sum the quantities for each food item
           const itemName = item.name;
           const quantity = item.amount;
-    
+
           if (foodPercentages[itemName]) {
             foodPercentages[itemName] += quantity;
           } else {
@@ -231,9 +234,9 @@ async function run() {
           }
         });
       });
-    
+
       const totalQuantity = Object.values(foodPercentages).reduce((total, quantity) => total + quantity, 0);
-    
+
       // Step 5 and 6: Calculate and return percentages as an array of objects
       const percentages = [];
       Object.keys(foodPercentages).forEach(itemName => {
@@ -241,13 +244,13 @@ async function run() {
         const percentage = (quantity / totalQuantity) * 100;
         percentages.push({ name: itemName, percent: percentage.toFixed(2) });
       });
-    
+
       // Step 7: Sort percentages array in descending order
       percentages.sort((a, b) => b.percent - a.percent);
-    
+
       // Step 8: Get the top 10 items
       const top10Items = percentages.slice(0, 10);
-    
+
       res.send(top10Items);
     })
 
@@ -272,10 +275,10 @@ async function run() {
 
 
     app.get('/singleUsers/:email', verifyJWT, async (req, res) => {
-    //console.log('get single  user')
-      const providedEmail=req.params.email
+      //console.log('get single  user')
+      const providedEmail = req.params.email
       const email = req.decoded.email;
-      
+
       const query = { email: providedEmail }
       const result = await usersCollection.findOne(query)
       //console.log(result,providedEmail)
@@ -364,44 +367,102 @@ async function run() {
     })
 
     app.get('/getMenu', async (req, res) => {
-      ////////console.log('get menu')
-      const result = await menuCollection.find().toArray()
+
+      const itemName=req.query.name
+
+
+      const result = await menuCollection.find(itemName !== 'all' ? { category: itemName } : {}).toArray();
+
+      const ratingPromises = result.map(async (item) => {
+        const { _id } = item;
+        const ratings = await reviewCollection.find({ menuID: new ObjectId(_id).toString() }).toArray();
+        const sum = ratings.reduce((total, rating) => total + rating.rating, 0);
+        const count = ratings.length;
+        const average = count > 0 ? sum / count : 0;
+        item.averageRating = average;
+      });
+    
+      await Promise.all(ratingPromises);
+    
+      console.log(result);
       res.send(result)
     })
 
+    app.get('/shopOurFav', async (req, res) => {
+      const result = await menuCollection.find().toArray();
 
-    app.get('/thaiCuisine',async(req,res)=>{
+      const ratingPromises = result.map(async (item) => {
+        const { _id } = item;
+        const ratings = await reviewCollection.find({ menuID: new ObjectId(_id).toString() }).toArray();
+        const sum = ratings.reduce((total, rating) => total + rating.rating, 0);
+        const count = ratings.length;
+        const average = count > 0 ? sum / count : 0;
+        item.averageRating = average;
+        item.totalCustomer=count
+      });
+    
+      await Promise.all(ratingPromises);
+    
+      console.log(result);
+
+      result.sort((a, b) => {
+        if (b.averageRating !== a.averageRating) {
+          return b.averageRating - a.averageRating;
+        }
+        return b.totalCustomer - a.totalCustomer;
+      })
+
+      
+      const limitedResult = result.slice(0, 4)
+      res.send(limitedResult)
+    })
+
+
+    app.get('/thaiCuisine', async (req, res) => {
       const query = {
-        $and:[
+        $and: [
           { cuisine: 'Thai' },
-          {category:'Rice'},
-          { time:'Dinner'}
+          { category: 'Rice' },
+          { time: 'Dinner' }
         ]
       }
-      const result=await menuCollection.find(query).toArray()
+      const result = await menuCollection.find(query).toArray()
       //res.send(result)
+      const ratingPromises = result.map(async (item) => {
+        const { _id } = item;
+        const ratings = await reviewCollection.find({ menuID: new ObjectId(_id).toString() }).toArray();
+        const sum = ratings.reduce((total, rating) => total + rating.rating, 0);
+        const count = ratings.length;
+        const average = count > 0 ? sum / count : 0;
+        item.averageRating = average;
+        item.totalCustomer=count
+      });
+    
+      await Promise.all(ratingPromises);
+
       const randomizedResult = shuffleArray(result)
+
       const randomFoods = randomizedResult.slice(0, 4)
 
       const arrayOfIds = randomFoods.map(food => new ObjectId(food._id).toString());
 
-    // Use aggregation to find documents with matching IDs in FavMenu collection
-    const matchingDocs = await favouriteMenuCollection.aggregate([
-      {
-        $match: {
-          menuID: { $in: arrayOfIds }
+      // Use aggregation to find documents with matching IDs in FavMenu collection
+      const matchingDocs = await favouriteMenuCollection.aggregate([
+        {
+          $match: {
+            menuID: { $in: arrayOfIds }
+          }
         }
-      }
-    ]).toArray();
+      ]).toArray();
 
-    //console.log(matchingDocs,)
-    // Update randomFoods with match field
-    randomFoods.forEach(food => {
-      food.match = matchingDocs.some(doc => doc.menuID === new ObjectId(food._id).toString());
-    });
+      //console.log(matchingDocs,)
+      // Update randomFoods with match field
+      randomFoods.forEach(food => {
+        food.match = matchingDocs.some(doc => doc.menuID === new ObjectId(food._id).toString());
+      });
 
-    res.send(randomFoods);
-  
+      res.send(randomFoods);
+
     })
 
 
@@ -409,26 +470,54 @@ async function run() {
       //////console.log('get single menu')
 
       const id = req.params.id
-      const email=req.query.email
+      const email = req.query.email
       //console.log(id, 'id',email)
       const query = { _id: new ObjectId(id) }
       const result = await menuCollection.findOne(query)
 
-      const matchingDocs = await paymentCollection.aggregate([
-        {
-          $match: {
-            'userEmail':email
-            ,
-            'cartItem': {
-              $elemMatch: {
-                'menuID': new ObjectId(result._id).toString(),
-              },
-            },
-          },
-        }
-      ]).toArray()
+      const {_id}=result
+
+      const ratings=await reviewCollection.find({menuID:new ObjectId(_id).toString()}).toArray()
+      const sum=ratings.reduce((total,rating)=>total+rating.rating,0)
+      const count=ratings.length
+      const average=count>0?sum/count:0 
+      result.averageRating = average;
+      result.totalCustomer=count
+      //console.log(result)
+      res.send(result)
+    })
+
+
+    app.get('/getSimilarMenu/:category', verifyJWT, async (req, res) => {
+      //////console.log('get single menu')
+
+      const category=req.params.category
+      const id=req.query.id
+      const query = {
+        $and: [
+          {category:category},
+          {_id: { $ne: new ObjectId(id) } }
+        ]
+      }
       
-      console.log(matchingDocs,'find')
+      const result=await menuCollection.find(query).toArray()
+
+      const ratingPromise=result.map(async(item)=>{
+        const {_id}=item
+
+        const ratings=await reviewCollection.find({menuID:new ObjectId(_id).toString()}).toArray()
+        
+        const sum=ratings?ratings.reduce((total,rating)=>total+rating.rating,0):0
+        const count=ratings.length
+        const average=count>0?sum/count:0 
+        item.averageRating = average;
+        item.totalCustomer=count
+      })
+
+      await Promise.all(ratingPromise)
+
+      console.log(result)
+
       res.send(result)
     })
 
@@ -506,12 +595,99 @@ async function run() {
       }
 
       const result = await favouriteMenuCollection.deleteOne(query)
-      console.log(result,'delete')
+      //console.log(result, 'delete')
       res.send(result)
     })
 
 
     //////////////////////////---Menu Api End---////////////////
+
+
+    ////////////////---user review collection---///////////////
+
+    app.post('/addReviews', verifyJWT, async (req, res) => {
+      const data = req.body
+
+      const query = {
+        $and: [
+          {
+            email: data.email
+          },
+          {
+            paymentId: data.paymentId
+          },
+          {
+            menuID: data.menuID
+          }
+        ]
+      }
+
+      const match = await reviewCollection.findOne(query)
+
+      if (match) {
+        return res.send({ result: 'duplicate' })
+      }
+      else {
+
+        const result = await reviewCollection.insertOne(data)
+        res.send(result)
+      }
+
+    })
+
+
+    app.get('/getReviews/:id', async (req, res) => {
+      const id = req.params.id
+      console.log(id)
+      const query = { menuID: id }
+      const result = await reviewCollection.find(query).toArray()
+      //console.log(result)
+      res.send(result)
+    })
+
+
+    app.post('/addFeedback', verifyJWT, async (req, res) => {
+      const data = req.body
+      console.log(data)
+      // const query = {
+      //   $and: [
+      //     {
+      //       email: data.email
+      //     },
+      //     {
+      //       paymentId: data.paymentId
+      //     },
+      //     {
+      //       menuID: data.menuID
+      //     }
+      //   ]
+      // }
+
+      // const match = await reviewCollection.findOne(query)
+
+      // if (match) {
+      //   return res.send({ result: 'duplicate' })
+      // }
+      // else {
+      //   const result = await reviewCollection.insertOne(data)
+      //   res.send(result)
+     
+      // }
+
+      const result = await feedbackCollection.insertOne(data)
+      res.send(result)
+    })
+
+
+    app.get('/getFeedback', async (req, res) => {
+      const result = await feedbackCollection.find().toArray()
+      //console.log(result)
+      res.send(result)
+    })
+
+
+    ////////////////---user review end---///////////////
+
 
 
     app.listen(port, () => {
