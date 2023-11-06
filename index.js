@@ -262,11 +262,7 @@ async function run() {
       res.send(result)
     })
 
-    app.get('/userss', async (req, res) => {  //for check server
-      ////////console.log('get user')
-      const result = await usersCollection.find().toArray()
-      res.send(result)
-    })
+
 
     app.get('/singleUsers', verifyJWT, async (req, res) => {
       ////////console.log('get single  user')
