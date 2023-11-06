@@ -5,7 +5,6 @@ require('dotenv').config()
 const stripe = require("stripe")(`${process.env.PAYMENT_SK}`);
 
 
-
 const port = process.env.PORT || 4000;
 const cors = require('cors');
 
