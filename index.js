@@ -368,10 +368,18 @@ async function run() {
 
     app.get('/getMenu', async (req, res) => {
 
-      const itemName=req.query.name
+      const category=req.query.name
+      const cuisine=req.query.cuisine
 
+      const query = {
+        $and: [
+         cuisine!=='all'? { cuisine: cuisine }:{},
+         category !== 'all' ? { category: category } : {},
+        
+        ]
+      }
 
-      const result = await menuCollection.find(itemName !== 'all' ? { category: itemName } : {}).toArray();
+      const result = await menuCollection.find(query).toArray();
 
       const ratingPromises = result.map(async (item) => {
         const { _id } = item;
@@ -597,6 +605,22 @@ async function run() {
       const result = await favouriteMenuCollection.deleteOne(query)
       //console.log(result, 'delete')
       res.send(result)
+    })
+
+
+    app.patch('/modifyAvailableStatus/:id',async(req,res)=>{
+      const id =req.params.id
+
+      const filter = { _id: new ObjectId(id) };
+      const status=req.body.status
+      const updateDoc = {
+        $set: {
+        isAvailable:status
+        },
+      }
+      const options = { upsert: true };
+      const result = await menuCollection.updateOne(filter, updateDoc, options)
+res.send(result)
     })
 
 
