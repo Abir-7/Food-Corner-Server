@@ -340,7 +340,7 @@ async function run() {
       if (email) {
         const result = await usersCollection.findOne({ email: email })
         ////console.log(result?.role, '145')
-        if (result.role === 'admin') {
+        if (result?.role === 'admin') {
           ////console.log('true section')
           res.status(200).send(true)
 
